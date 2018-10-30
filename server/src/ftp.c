@@ -16,6 +16,11 @@ int onInit(State *connst) {
 /* RNFR, RNTO */
 int onRecv(State *connst, char *msg, int len) {
   strip(msg);
+  if(strlen(msg)<=0){
+    hQuit(connst);
+    return 0;
+  }
+  printf("recv %s\n",msg);
   if (check(msg, "USER"))
     hUser(connst, msg + 5);
   else if (check(msg, "PASS"))
@@ -168,33 +173,19 @@ void hRetr(State *connst, char *msg) {
   }
 
   int connfd = connst->connfd;
-  int filefd;
-
+  pthread_t newthread;
   char sendmsg[100];
-  int size = 0;
-  FILE *fptr;
-
-  fptr = fopen(msg, "rb");
-
-  fseek(fptr, 0, SEEK_END);
-  size = ftell(fptr);
-  fseek(fptr, 0, SEEK_SET);
-
   sprintf(sendmsg,
-          "150 Opening BINARY mode data connection for %s (%d bytes).\r\n", msg,
-          size);
+          "150 Opening BINARY mode data connection for %s.\r\n", msg);
 
   sendMsg(connfd, sendmsg);
+  strcpy(connst->filename,msg);
 
-  if (connst->mode == 0)
-    filefd = createConnSocket(connst->clientPort, connst->clientAddr);
-  else
-    filefd = accept(connst->pasvfd, NULL, NULL);
+  if (pthread_create(&newthread, NULL,sendFile, connst)) {
+    perror("Error creating thread");
+    return;
+  }
 
-  sendFile(filefd, fptr);
-  fclose(fptr);
-  sendMsg(connfd, "226 Transfer complete.\r\n");
-  close(filefd);
 }
 void hStor(State *connst, char *msg) {
 
@@ -204,26 +195,18 @@ void hStor(State *connst, char *msg) {
   }
 
   int connfd = connst->connfd;
-  int filefd;
-
+  pthread_t newthread;
   char sendmsg[100];
-  FILE *fptr;
-
-  fptr = fopen(msg, "wb");
-
   sprintf(sendmsg, "150 Creating upload connection.\r\n");
 
   sendMsg(connfd, sendmsg);
 
-  if (connst->mode == 0)
-    filefd = createConnSocket(connst->clientPort, connst->clientAddr);
-  else
-    filefd = accept(connst->pasvfd, NULL, NULL);
+  strcpy(connst->filename,msg);
 
-  recvFile(filefd, fptr);
-  fclose(fptr);
-  sendMsg(connfd, "226 Transfer complete.\r\n");
-  close(filefd);
+  if (pthread_create(&newthread, NULL,recvFile, connst)) {
+    perror("Error creating thread");
+    return;
+  }
 }
 
 void hPwd(State *connst) {
@@ -260,7 +243,7 @@ void hList(State *connst, char *msg) {
   char path[513];
   char pathf[769];
   char temp[282];
-  char lsinfo[4096];
+  char lsinfo[ChunkSize];
 
   if (!connst->vailed) {
     sendMsg(connst->connfd, "503 \r\n");
@@ -343,6 +326,8 @@ void hList(State *connst, char *msg) {
 
   sendMsg(connfd, "226 Transfer complete.\r\n");
   close(filefd);
+  if (connst->mode != 0)
+    close(connst->pasvfd);
 }
 
 void hRnto(State *connst, char *msg) {
@@ -400,50 +385,86 @@ void hMkd(State *connst, char *msg) {
 
   sendMsg(connst->connfd, "257 \r\n");
   struct stat st = {0};
-  printf("path: %s\n", msg);
   if (stat(msg, &st) < 0) {
     mkdir(msg, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-    printf("plth: %s\n", msg);
     sendMsg(connst->connfd, "250 \r\n");
   } else {
-    printf("pth: %s\n", msg);
     sendMsg(connst->connfd, "550 \r\n");
   }
 }
 
 void hQuit(State *connst) {
-
   sendMsg(connst->connfd, "221 Bye.\r\n");
   printf("quit: %d\n", connst->id);
   close(connst->pasvfd);
   closeConn(connst);
 }
 
-void sendFile(int connfd, FILE *fptr) {
+void* sendFile(void* vPtr) {
+  State* connst=(State*)vPtr;
+  FILE *fptr;
+  int filefd;
   char buffer[ChunkSize];
   int n;
+  int connfd;
+  connfd=connst->connfd;
+
+  fptr = fopen(connst->filename, "rb");
+
+  if (connst->mode == 0)
+    filefd = createConnSocket(connst->clientPort, connst->clientAddr);
+  else
+    filefd = accept(connst->pasvfd, NULL, NULL);
+
   while (1) {
     n = fread(buffer, 1, ChunkSize, fptr);
-    if (send(connfd, buffer, n * sizeof(char), 0) < 0)
+    if (send(filefd, buffer, n * sizeof(char), 0) < 0)
       perror("Error sendFile()");
     if (n <= 0)
       break;
   }
+
+  fclose(fptr);
+  sendMsg(connfd, "226 Transfer complete.\r\n");
+  close(filefd);
+
+  if (connst->mode != 0)
+    close(connst->pasvfd);
+  return NULL;
 }
 
-void recvFile(int connfd, FILE *fptr) {
+void* recvFile(void *vPtr) {
+  State* connst=(State*)vPtr;
+  int connfd = connst->connfd;
+  int filefd;
   char buffer[ChunkSize];
   int n;
+  FILE *fptr;
+
+  fptr = fopen(connst->filename, "wb");
+
+  if (connst->mode == 0)
+    filefd = createConnSocket(connst->clientPort, connst->clientAddr);
+  else
+    filefd = accept(connst->pasvfd, NULL, NULL);
+
   while (1) {
-    if ((n = recv(connfd, buffer, ChunkSize * sizeof(char), 0)) < 0) {
+    if ((n = recv(filefd, buffer, ChunkSize * sizeof(char), 0)) < 0) {
       perror("Error recv()");
       break;
     }
-    if (fwrite(buffer, 1, n, fptr) < 0) {
-      perror("Error sendFile()");
-      return;
-    }
     if (n <= 0)
       break;
+    if (fwrite(buffer, 1, n, fptr) < 0) {
+      perror("Error sendFile()");
+      return NULL;
+    }
   }
+
+  fclose(fptr);
+  sendMsg(connfd, "226 Transfer complete.\r\n");
+  close(filefd);
+  if (connst->mode != 0)
+    close(connst->pasvfd);
+  return NULL;
 }

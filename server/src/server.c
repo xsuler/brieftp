@@ -17,6 +17,7 @@ int sendMsg(int connfd, char *msg) {
     perror("Error write()");
     return 1;
   }
+  printf("sent %s\n",msg);
   return 0;
 }
 

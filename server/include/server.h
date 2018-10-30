@@ -22,15 +22,16 @@ typedef struct State{
   int vailed;
   int mode; //0 port 1 pasv
   int running;
-  int pasvfd;
   int clientPort;
   int id;
   int rnflag;
+  int pasvfd;
   char clientAddr[18];
   char myhost[18];
   char root[512];
   char wd[512];
   char rntemp[512];
+  char filename[512];
 }State;
 
 typedef int (*Recever)(State*, char *, int);
@@ -41,7 +42,6 @@ void closeConn(State* connst);
 int start(int port,char* root);
 int createListenSocket(int port,unsigned long saddr);
 int createConnSocket(int port,char* saddr);
-void sendFile(int connfd,FILE* fptr);
 void hMkd(State *connst,char* msg);
 void hCwd(State *connst,char* msg);
 void hPwd(State *connst);
