@@ -59,7 +59,6 @@ void *handler(void *vPtr) {
   while (connst->running) {
 
     if ((len = recv(connfd, buffer, 5000, 0)) < 0) {
-      perror("Error recv()");
       break;
     }
     buffer[len] = '\0';
@@ -69,6 +68,7 @@ void *handler(void *vPtr) {
       close(connfd);
     }
   }
+  close(connfd);
   return NULL;
 }
 

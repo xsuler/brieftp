@@ -17,6 +17,25 @@ typedef struct PState{
   char root[512];
 }PState;
 
+enum Cmd {
+          USER,
+          PASS,
+          SYST,
+          TYPE,
+          PORT,
+          PASV,
+          RETR,
+          STOR,
+          MKD,
+          CWD,
+          PWD,
+          RMD,
+          LIST,
+          RNFR,
+          RNTO,
+          QUIT,
+};
+
 typedef struct State{
   int connfd;
   int vailed;
@@ -24,7 +43,6 @@ typedef struct State{
   int running;
   int clientPort;
   int id;
-  int rnflag;
   int pasvfd;
   char clientAddr[18];
   char myhost[18];
@@ -32,6 +50,8 @@ typedef struct State{
   char wd[512];
   char rntemp[512];
   char filename[512];
+  char usertemp[512];
+  enum Cmd lastcmd;
 }State;
 
 typedef int (*Recever)(State*, char *, int);

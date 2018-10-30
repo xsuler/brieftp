@@ -5,10 +5,15 @@ extern Init pInit;
 Recever pRecv = &onRecv;
 Init pInit = &onInit;
 
+// errno
+// client modify mv
+// test under diff port & root
+// report <=3
+
+
 int check(char *msg, char *cmd) { return !strncmp(msg, cmd, strlen(cmd)); }
 
 int onInit(State *connst) {
-  connst->rnflag = 0;
   handShake(connst);
   chdir(connst->wd);
   return 0;
@@ -21,68 +26,105 @@ int onRecv(State *connst, char *msg, int len) {
     return 0;
   }
   printf("recv %s\n",msg);
-  if (check(msg, "USER"))
+  if (check(msg, "USER")){
     hUser(connst, msg + 5);
-  else if (check(msg, "PASS"))
+    connst->lastcmd=USER;
+  }
+  else if (check(msg, "PASS")){
     hPass(connst, msg + 5);
-  else if (check(msg, "SYST"))
+    connst->lastcmd=PASS;
+  }
+  else if (check(msg, "SYST")){
     hSyst(connst);
-  else if (check(msg, "TYPE"))
+    connst->lastcmd=SYST;
+  }
+  else if (check(msg, "TYPE")){
     hType(connst, msg + 5);
-  else if (check(msg, "PORT"))
+    connst->lastcmd=TYPE;
+  }
+  else if (check(msg, "PORT")){
     hPort(connst, msg + 5);
-  else if (check(msg, "PASV"))
+    connst->lastcmd=PORT;
+  }
+  else if (check(msg, "PASV")){
     hPasv(connst);
-  else if (check(msg, "RETR"))
+    connst->lastcmd=PASV;
+  }
+  else if (check(msg, "RETR")){
     hRetr(connst, msg + 5);
-  else if (check(msg, "STOR"))
+    connst->lastcmd=RETR;
+  }
+  else if (check(msg, "STOR")){
     hStor(connst, msg + 5);
-  else if (check(msg, "MKD"))
+    connst->lastcmd=STOR;
+  }
+  else if (check(msg, "MKD")){
     hMkd(connst, msg + 4);
-  else if (check(msg, "CWD"))
+    connst->lastcmd=MKD;
+  }
+  else if (check(msg, "CWD")){
     hCwd(connst, msg + 4);
-  else if (check(msg, "PWD"))
+    connst->lastcmd=CWD;
+  }
+  else if (check(msg, "PWD")){
     hPwd(connst);
-  else if (check(msg, "LIST"))
-    hList(connst, msg + 5);
-  else if (check(msg, "RNFR"))
-    hRnfr(connst, msg + 5);
-  else if (check(msg, "RNTO"))
-    hRnto(connst, msg + 5);
-  else if (check(msg, "RMD"))
+    connst->lastcmd=PWD;
+  }
+  else if (check(msg, "RMD")){
     hRmd(connst, msg + 4);
-  else if (check(msg, "QUIT"))
+    connst->lastcmd=RMD;
+  }
+  else if (check(msg, "LIST")){
+    hList(connst, msg + 5);
+    connst->lastcmd=LIST;
+  }
+  else if (check(msg, "RNFR")){
+    hRnfr(connst, msg + 5);
+    connst->lastcmd=RNFR;
+  }
+  else if (check(msg, "RNTO")){
+    hRnto(connst, msg + 5);
+    connst->lastcmd=RNTO;
+  }
+  else if (check(msg, "QUIT")){
     hQuit(connst);
+    connst->lastcmd=QUIT;
+  }
   else
-    sendMsg(connst->connfd, "502 \r\n");
+    sendMsg(connst->connfd, "502 command not implemented.\r\n");
   return 0;
 }
 
 void handShake(State *connst) {
   int connfd = connst->connfd;
-  sendMsg(connfd, "220 welcome\r\n");
+  sendMsg(connfd, "220 welcome.\r\n");
 }
 
 void hUser(State *connst, char *msg) {
   int connfd = connst->connfd;
-  if (check(msg, "anonymous")) {
-    connst->vailed = 1;
-    sendMsg(connfd, "331 Guest login ok, send your complete e-mail address as "
-                    "password.\r\n");
-  } else {
-    sendMsg(connfd, "504 \r\n");
-  }
+  strcpy(connst->usertemp,msg);
+  sendMsg(connfd, "331 Guest login ok, send your complete e-mail address as "
+                  "password.\r\n");
 }
 
 void hPass(State *connst, char *msg) {
   int connfd = connst->connfd;
-  sendMsg(connfd, "230 my ftp server\r\n");
+  if(connst->lastcmd!=USER){
+    sendMsg(connfd, "503 the previous request was not USER.\r\n");
+    return;
+  }
+  if(!strcmp(connst->usertemp,"anonymous")){
+    connst->vailed = 1;
+    sendMsg(connfd, "230 welcome to my ftp server.\r\n");
+    return;
+  }
+  sendMsg(connfd, "530 username and password are jointly unacceptable.\r\n");
 }
 
 void hSyst(State *connst) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
@@ -92,21 +134,21 @@ void hSyst(State *connst) {
 
 void hType(State *connst, char *msg) {
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
   int connfd = connst->connfd;
-  if (check(msg, "I")) {
+  if (check(msg, "I")||check(msg, "i")) {
     sendMsg(connfd, "200 Type set to I.\r\n");
   } else {
-    sendMsg(connfd, "504\r\n");
+    sendMsg(connfd, "504 File Type not supported.\r\n");
   }
 }
 
 void hPasv(State *connst) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
@@ -132,7 +174,7 @@ void hPasv(State *connst) {
 void hPort(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
@@ -168,7 +210,7 @@ void hPort(State *connst, char *msg) {
 void hRetr(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
@@ -182,6 +224,7 @@ void hRetr(State *connst, char *msg) {
   strcpy(connst->filename,msg);
 
   if (pthread_create(&newthread, NULL,sendFile, connst)) {
+    sendMsg(connst->connfd, "425 Cannot open data connection.\r\n");
     perror("Error creating thread");
     return;
   }
@@ -190,7 +233,7 @@ void hRetr(State *connst, char *msg) {
 void hStor(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
@@ -212,7 +255,7 @@ void hStor(State *connst, char *msg) {
 void hPwd(State *connst) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
@@ -224,13 +267,15 @@ void hPwd(State *connst) {
 void hRmd(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
-  if (rmdir(msg) < 0)
-    sendMsg(connst->connfd, "550 \r\n");
-  sendMsg(connst->connfd, "250 \r\n");
+  if (rmdir(msg) < 0){
+    sendMsg(connst->connfd, "550 the removal failed.\r\n");
+    return;
+  }
+  sendMsg(connst->connfd, "250 the directory was successfully removed.\r\n");
 }
 
 void hList(State *connst, char *msg) {
@@ -246,7 +291,7 @@ void hList(State *connst, char *msg) {
   char lsinfo[ChunkSize];
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
@@ -256,8 +301,17 @@ void hList(State *connst, char *msg) {
   else
     filefd = accept(connst->pasvfd, NULL, NULL);
 
+  if(filefd<0){
+    sendMsg(connst->connfd, "425 no TCP connection was established.\r\n");
+    return;
+  }
+
   sprintf(path, "%s/%s", connst->wd, msg);
   dir = opendir(path);
+  if(dir==NULL){
+    sendMsg(connst->connfd, "451 cannot open directory from disk.\r\n");
+    return;
+  }
   while ((file = readdir(dir)) != NULL) {
     sprintf(pathf, "%s/%s", path, file->d_name);
     stat(pathf, &st);
@@ -318,6 +372,7 @@ void hList(State *connst, char *msg) {
             file->d_name);
     strcat(lsinfo, temp);
     if (send(filefd, lsinfo, strlen(lsinfo) * sizeof(char), 0) < 0) {
+      sendMsg(connst->connfd, "426 data connection broken by the client or by network failure.\r\n");
       perror("Error hList()");
       break;
     }
@@ -333,43 +388,41 @@ void hList(State *connst, char *msg) {
 void hRnto(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
-  if (!connst->rnflag) {
-    sendMsg(connst->connfd, "503 \r\n");
+  if (connst->lastcmd!=RNFR) {
+    sendMsg(connst->connfd, "503 should be called after RNFR.\r\n");
     return;
   }
-  connst->rnflag = 0;
+
   if(!rename(connst->rntemp,msg)){
-    sendMsg(connst->connfd, "250 \r\n");
+    sendMsg(connst->connfd, "250 the file was renamed successfully.\r\n");
     return;
   }
-  sendMsg(connst->connfd, "550 \r\n");
+  //need to use errno
+  sendMsg(connst->connfd, "550 File unavailable.\r\n");
 }
 void hRnfr(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
-  connst->rnflag = 1;
   if (access(msg, F_OK) == -1) {
-    sendMsg(connst->connfd, "550 \r\n");
+    sendMsg(connst->connfd, "550 File unavailable.\r\n");
   } else {
     strcpy(connst->rntemp, msg);
-    sendMsg(connst->connfd, "350 \r\n");
+    sendMsg(connst->connfd, "350 the file exists.\r\n");
   }
 }
 void hCwd(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
-
-  // todo: validate
 
   chdir(msg);
   getcwd(connst->wd, 512);
@@ -379,17 +432,20 @@ void hCwd(State *connst, char *msg) {
 void hMkd(State *connst, char *msg) {
 
   if (!connst->vailed) {
-    sendMsg(connst->connfd, "503 \r\n");
+    sendMsg(connst->connfd, "503 access denied.\r\n");
     return;
   }
 
-  sendMsg(connst->connfd, "257 \r\n");
+  char msgt[600];
+  sprintf(msgt, "257 %s\r\n", connst->wd);
+  sendMsg(connst->connfd, msgt);
+
   struct stat st = {0};
   if (stat(msg, &st) < 0) {
     mkdir(msg, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-    sendMsg(connst->connfd, "250 \r\n");
+    sendMsg(connst->connfd, "250  the directory was successfully created.\r\n");
   } else {
-    sendMsg(connst->connfd, "550 \r\n");
+    sendMsg(connst->connfd, "550 the creation failed.\r\n");
   }
 }
 
@@ -410,16 +466,27 @@ void* sendFile(void* vPtr) {
   connfd=connst->connfd;
 
   fptr = fopen(connst->filename, "rb");
+  if(fptr==NULL){
+    sendMsg(connst->connfd, "451 cannot read file from disk.\r\n");
+    return NULL;
+  }
 
   if (connst->mode == 0)
     filefd = createConnSocket(connst->clientPort, connst->clientAddr);
   else
     filefd = accept(connst->pasvfd, NULL, NULL);
 
+  if(filefd<0){
+    sendMsg(connst->connfd, "425 no TCP connection was established.\r\n");
+    return NULL;
+  }
+
   while (1) {
     n = fread(buffer, 1, ChunkSize, fptr);
-    if (send(filefd, buffer, n * sizeof(char), 0) < 0)
-      perror("Error sendFile()");
+    if (send(filefd, buffer, n * sizeof(char), 0) < 0){
+      sendMsg(connst->connfd, "426 data connection broken by the client or by network failure.\r\n");
+      break;
+    }
     if (n <= 0)
       break;
   }
@@ -442,21 +509,30 @@ void* recvFile(void *vPtr) {
   FILE *fptr;
 
   fptr = fopen(connst->filename, "wb");
+  if(fptr==NULL){
+    sendMsg(connst->connfd, "451 cannot write file to disk.\r\n");
+    return NULL;
+  }
 
   if (connst->mode == 0)
     filefd = createConnSocket(connst->clientPort, connst->clientAddr);
   else
     filefd = accept(connst->pasvfd, NULL, NULL);
 
+  if(filefd<0){
+    sendMsg(connst->connfd, "425 no TCP connection was established.\r\n");
+    return NULL;
+  }
+
   while (1) {
     if ((n = recv(filefd, buffer, ChunkSize * sizeof(char), 0)) < 0) {
-      perror("Error recv()");
+      sendMsg(connst->connfd, "426 data connection broken by the client or by network failure.\r\n");
       break;
     }
     if (n <= 0)
       break;
     if (fwrite(buffer, 1, n, fptr) < 0) {
-      perror("Error sendFile()");
+      sendMsg(connst->connfd, "451 cannot write file to disk.\r\n");
       return NULL;
     }
   }
