@@ -3,6 +3,16 @@
 Recever pRecv;
 Init pInit;
 
+void strippath(char *str) {
+  int n = strlen(str);
+  char *pt;
+  for (pt = str + n - 1; pt >= str; pt--) {
+    if ((pt[0] == '/'))
+      pt[0] = 0;
+    else
+      break;
+  }
+}
 void strip(char *str) {
   int n = strlen(str);
   char *pt;
@@ -12,12 +22,12 @@ void strip(char *str) {
   }
 }
 
-int sendMsg(int connfd, char *msg) {
-  if (send(connfd, msg, strlen(msg), 0) < 0) {
+int sendMsg(State* connst, char *msg) {
+  if (send(connst->connfd, msg, strlen(msg), 0) < 0) {
     perror("Error write()");
     return 1;
   }
-  printf("sent %s\n",msg);
+  printf("thread %d send %s\n",connst->id,msg);
   return 0;
 }
 

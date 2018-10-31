@@ -57,7 +57,7 @@ typedef struct State{
 typedef int (*Recever)(State*, char *, int);
 typedef int (*Init)(State*);
 extern Recever pRecv;
-int sendMsg(int connfd, char* msg);
+int sendMsg(State* connst, char* msg);
 void closeConn(State* connst);
 int start(int port,char* root);
 int createListenSocket(int port,unsigned long saddr);
@@ -68,5 +68,6 @@ void hPwd(State *connst);
 void hRmd(State *connst, char *msg);
 void hList(State *connst, char *msg);
 void strip(char *str);
+void strippath(char *str);
 void hRnto(State *connst, char *msg);
 void hRnfr(State *connst, char *msg);

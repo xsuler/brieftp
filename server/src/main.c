@@ -3,7 +3,7 @@
 int main(int argc, char **argv) {
   int p;
   int port=21;
-  char root[10];
+  char root[512];
   strcpy(root,"/tmp/");
   int rtlen;
   for (p=1;p<argc;p++){
@@ -15,8 +15,10 @@ int main(int argc, char **argv) {
     if(!strcmp(argv[p],"-root")){
       strcpy(root,argv[p+1]);
       rtlen=strlen(root);
-      root[rtlen]='/';
-      root[rtlen+1]=0;
+      if(root[rtlen-1]!='/'){
+        root[rtlen]='/';
+        root[rtlen+1]=0;
+      }
       p++;
       continue;
     }

@@ -132,7 +132,7 @@ recvIO conn= do
       recvLoop=do
         msg <- recv conn 4096
         unless (C.null msg) $ do
-          -- C.putStr msg
+          C.putStr msg
           recvLoop
         return ()
 
@@ -208,41 +208,31 @@ initAction sock=
   >>=getSyst
   >>=setType "I"
 
-portStorAction myHostC file sock=do
+portAction myHostC act actor sock=do
   (p1,p2)<-((,))<$>(randomRIO (0,255)::IO Int)<*>(randomRIO (0,255)::IO Int)
   readykey<-newEmptyMVar::IO (MVar ())
-  handlePort readykey (sendFile file) (show $p1*256+p2) sock
-  port myHostC p1 p2 sock
-  takeMVar readykey
-  stor file sock
+  action myHostC p1 p2 readykey
+  where
+    action myHostC p1 p2 readykey=
+      return sock
+      >>=handlePort readykey actor (show $p1*256+p2)
+      >>=port myHostC p1 p2
+      >>takeMVar readykey
+      >>act sock
 
-portRetrAction  myHostC file sock=do
-  (p1,p2)<-((,))<$>(randomRIO (0,255)::IO Int)<*>(randomRIO (0,255)::IO Int)
-  readykey<-newEmptyMVar::IO (MVar ())
-  handlePort readykey (recvFile file) (show $p1*256+p2) sock
-  port myHostC p1 p2 sock
-  takeMVar readykey
-  retr file sock
-
-pasvStorAction file sock= do
+pasvAction act actor sock= do
   (p1,p2)<-((,))<$>(randomRIO (0,255)::IO Int)<*>(randomRIO (0,255)::IO Int)
   (sock,info)<-pasv p1 p2 sock
-  stor file sock
-  handlePasv (sendFile file) info sock
+  act sock
+  handlePasv actor info sock
 
-pasvRetrAction file sock=do
-  (p1,p2)<-((,))<$>(randomRIO (0,255)::IO Int)<*>(randomRIO (0,255)::IO Int)
-  (sock,info)<-pasv p1 p2 sock
-  retr file sock
-  handlePasv (recvFile file) info sock
+portStorAction myHostC file =portAction myHostC (stor file) (sendFile file)
+portRetrAction myHostC file =portAction myHostC (retr file) (recvFile file)
+portListAction myHostC dir =portAction myHostC (list dir) recvIO
 
-portListAction myHostC dir sock=do
-  (p1,p2)<-((,))<$>(randomRIO (0,255)::IO Int)<*>(randomRIO (0,255)::IO Int)
-  readykey<-newEmptyMVar::IO (MVar ())
-  handlePort readykey recvIO (show $p1*256+p2) sock
-  port myHostC p1 p2 sock
-  takeMVar readykey
-  list dir sock
+pasvStorAction file =pasvAction (stor file) (sendFile file)
+pasvRetrAction file =pasvAction (retr file) (recvFile file)
+pasvListAction dir =pasvAction (list dir) recvIO
 
 procAction sock =do
   waitkey<-newEmptyMVar::IO (MVar ())
@@ -253,10 +243,10 @@ procAction sock =do
     action=
       return sock
       >>=initAction
-      >>=pasvStorAction "asd"
+      >>=portListAction "127,0,0,1" "2.jpeg"
 
 main =do
-  ret<-createConnection procAction ("127.0.0.1", "21")
+  ret<-createConnection procAction ("127.0.0.1", "2000")
   case ret of
     Left e->putStr "main error: ">>print e
     Right _->return ()
