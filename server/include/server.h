@@ -31,6 +31,7 @@ enum Cmd {
           PWD,
           RMD,
           LIST,
+          DELE,
           RNFR,
           RNTO,
           QUIT,
@@ -62,12 +63,5 @@ void closeConn(State* connst);
 int start(int port,char* root);
 int createListenSocket(int port,unsigned long saddr);
 int createConnSocket(int port,char* saddr);
-void hMkd(State *connst,char* msg);
-void hCwd(State *connst,char* msg);
-void hPwd(State *connst);
-void hRmd(State *connst, char *msg);
-void hList(State *connst, char *msg);
 void strip(char *str);
 void strippath(char *str);
-void hRnto(State *connst, char *msg);
-void hRnfr(State *connst, char *msg);

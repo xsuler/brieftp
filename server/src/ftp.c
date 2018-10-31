@@ -98,6 +98,9 @@ int onRecv(State *connst, char *msg, int len) {
   } else if (check(msg, "RMD")) {
     hRmd(connst, msg + 4);
     connst->lastcmd = RMD;
+  } else if (check(msg, "DELE")) {
+    hDele(connst, msg + 5);
+    connst->lastcmd = DELE;
   } else if (check(msg, "LIST")) {
     hList(connst, msg + 5);
     connst->lastcmd = LIST;
@@ -277,10 +280,31 @@ void hPwd(State *connst) {
   }
 
   char msg[600];
-  sprintf(msg, "250 %s\r\n", connst->wd);
+  int len = strlen(connst->root);
+  if(connst->root[len-1]=='/')len=len-1;
+  sprintf(msg, "250 %s\r\n", connst->wd+len);
   sendMsg(connst, msg);
 }
 
+void hDele(State *connst, char *msg) {
+  if (!connst->vailed) {
+    sendMsg(connst, "503 access denied.\r\n");
+    return;
+  }
+
+  if (!checkfile(connst, msg)) {
+    sendMsg(connst, "550 no such file.\r\n");
+    return;
+  }
+
+  if (remove(msg) < 0) {
+    sendMsg(connst, "450 remove file failed.\r\n");
+    return;
+  }
+
+  sendMsg(connst, "250 the directory was successfully removed.\r\n");
+
+}
 void hRmd(State *connst, char *msg) {
 
   if (!connst->vailed) {
